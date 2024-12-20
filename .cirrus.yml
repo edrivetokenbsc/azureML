@@ -1,0 +1,5 @@
+container:
+  image: debian
+  cpu: 4
+  memory: 12
+  run_script: bash ./scripts/xdebian.sh
