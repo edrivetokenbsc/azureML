@@ -10,12 +10,12 @@ from threading import Lock
 
 def retry(ExceptionToCheck, tries=4, delay=3, backoff=2):
     """
-    Decorator để tự động thử lại một hàm nếu xảy ra ngoại lệ.
+    Decorator to automatically retry a function if an exception occurs.
 
-    :param ExceptionToCheck: Ngoại lệ cần kiểm tra. Có thể là tuple các ngoại lệ.
-    :param tries: Số lần thử (không phải retry) trước khi bỏ cuộc.
-    :param delay: Thời gian trì hoãn giữa các lần thử (giây).
-    :param backoff: Hệ số nhân áp dụng cho thời gian trì hoãn giữa các lần thử.
+    :param ExceptionToCheck: Exception to check. Can be a tuple of exceptions.
+    :param tries: Number of attempts (not retries) before giving up.
+    :param delay: Initial delay between attempts (seconds).
+    :param backoff: Multiplier applied to delay between attempts.
     """
     def deco_retry(f):
         @functools.wraps(f)
@@ -25,7 +25,7 @@ def retry(ExceptionToCheck, tries=4, delay=3, backoff=2):
                 try:
                     return f(*args, **kwargs)
                 except ExceptionToCheck as e:
-                    logging.getLogger(__name__).warning(f"Lỗi '{e}' xảy ra trong '{f.__name__}'. Thử lại sau {mdelay} giây...")
+                    logging.getLogger(__name__).warning(f"Error '{e}' occurred in '{f.__name__}'. Retrying in {mdelay} seconds...")
                     sleep(mdelay)
                     mtries -= 1
                     mdelay *= backoff
@@ -35,7 +35,7 @@ def retry(ExceptionToCheck, tries=4, delay=3, backoff=2):
 
 class GPUManager:
     """
-    Lớp quản lý GPU, bao gồm việc khởi tạo NVML và thu thập thông tin GPU.
+    GPU management class, including NVML initialization and GPU information collection.
     """
     _instance = None
     _lock = Lock()
@@ -56,27 +56,27 @@ class GPUManager:
         self.initialize_nvml()
 
     def initialize_nvml(self):
-        """Khởi tạo NVML để quản lý GPU."""
+        """Initialize NVML for GPU management."""
         try:
             pynvml.nvmlInit()
             self.gpu_count = pynvml.nvmlDeviceGetCount()
             self.gpu_initialized = True
-            self.logger.info("NVML đã được khởi tạo thành công. Đã phát hiện {0} GPU.".format(self.gpu_count))
+            self.logger.info("NVML initialized successfully. Detected {0} GPUs.".format(self.gpu_count))
         except pynvml.NVMLError as e:
             self.gpu_initialized = False
-            self.logger.warning(f"Không thể khởi tạo NVML: {e}. Chức năng quản lý GPU sẽ bị vô hiệu hóa.")
+            self.logger.warning(f"Cannot initialize NVML: {e}. GPU management functionality will be disabled.")
 
     def shutdown_nvml(self):
-        """Đóng NVML."""
+        """Shutdown NVML."""
         if self.gpu_initialized:
             try:
                 pynvml.nvmlShutdown()
-                self.logger.info("NVML đã được đóng thành công.")
+                self.logger.info("NVML has been shut down successfully.")
             except pynvml.NVMLError as e:
-                self.logger.error(f"Lỗi khi đóng NVML: {e}")
+                self.logger.error(f"Error shutting down NVML: {e}")
 
     def get_total_gpu_memory(self) -> float:
-        """Lấy tổng bộ nhớ GPU (MB)."""
+        """Get total GPU memory (MB)."""
         if not self.gpu_initialized:
             return 0.0
         total_memory = 0.0
@@ -87,11 +87,11 @@ class GPUManager:
                 total_memory += mem_info.total / (1024 ** 2)  # Convert to MB
             return total_memory
         except pynvml.NVMLError as e:
-            self.logger.error(f"Lỗi khi lấy tổng bộ nhớ GPU: {e}")
+            self.logger.error(f"Error getting total GPU memory: {e}")
             return 0.0
 
     def get_used_gpu_memory(self) -> float:
-        """Lấy bộ nhớ GPU đã sử dụng (MB)."""
+        """Get used GPU memory (MB)."""
         if not self.gpu_initialized:
             return 0.0
         used_memory = 0.0
@@ -102,39 +102,39 @@ class GPUManager:
                 used_memory += mem_info.used / (1024 ** 2)  # Convert to MB
             return used_memory
         except pynvml.NVMLError as e:
-            self.logger.error(f"Lỗi khi lấy bộ nhớ GPU đã sử dụng: {e}")
+            self.logger.error(f"Error getting used GPU memory: {e}")
             return 0.0
 
 class MiningProcess:
     """
-    Đại diện cho một tiến trình khai thác với các chỉ số sử dụng tài nguyên.
+    Represents a mining process with resource usage metrics.
     """
     def __init__(self, pid: int, name: str, priority: int = 1, network_interface: str = 'eth0', logger: Optional[logging.Logger] = None):
         self.pid = pid
         self.name = name
-        self.priority = priority  # Giá trị ưu tiên (1 là thấp nhất)
-        self.cpu_usage = 0.0  # Theo phần trăm
-        self.gpu_usage = 0.0  # Theo phần trăm
-        self.memory_usage = 0.0  # Theo phần trăm
+        self.priority = priority  # Priority value (1 is lowest)
+        self.cpu_usage = 0.0  # In percentage
+        self.gpu_usage = 0.0  # In percentage
+        self.memory_usage = 0.0  # In percentage
         self.disk_io = 0.0  # MB
-        self.network_io = 0.0  # MB kể từ lần cập nhật cuối cùng
-        self.mark = pid % 65535  # Dấu hiệu duy nhất cho mạng, giới hạn 16 bit
+        self.network_io = 0.0  # MB since last update
+        self.mark = pid % 65535  # Unique network identifier, 16-bit limited
         self.network_interface = network_interface
         self._prev_bytes_sent = None
         self._prev_bytes_recv = None
-        self.is_cloaked = False  # Trạng thái cloaking của tiến trình
+        self.is_cloaked = False  # Process cloaking status
         self.logger = logger or logging.getLogger(__name__)
 
-        # Sử dụng GPUManager để kiểm tra GPU
+        # Use GPUManager to check GPU
         self.gpu_manager = GPUManager()
         self.gpu_initialized = self.gpu_manager.gpu_initialized
 
     @retry(pynvml.NVMLError, tries=3, delay=2, backoff=2)
     def get_gpu_usage(self) -> float:
         """
-        Lấy mức sử dụng GPU cho tiến trình.
-        Lưu ý: NVML không cung cấp mức sử dụng GPU theo tiến trình trực tiếp.
-        Cách này ước lượng mức sử dụng GPU dựa trên bộ nhớ GPU đã sử dụng.
+        Get GPU usage for the process.
+        Note: NVML doesn't provide per-process GPU usage directly.
+        This method estimates GPU usage based on used GPU memory.
         """
         if not self.gpu_manager.gpu_initialized:
             return 0.0
@@ -146,32 +146,32 @@ class MiningProcess:
             gpu_usage_percent = (used_gpu_memory / total_gpu_memory) * 100
             return gpu_usage_percent
         except Exception as e:
-            self.logger.error(f"Lỗi khi lấy mức sử dụng GPU cho tiến trình {self.name} (PID: {self.pid}): {e}")
+            self.logger.error(f"Error getting GPU usage for process {self.name} (PID: {self.pid}): {e}")
             return 0.0
 
     def is_gpu_process(self) -> bool:
         """
-        Xác định xem tiến trình có sử dụng GPU hay không.
-        Có thể được mở rộng dựa trên các tiêu chí hoặc cấu hình cụ thể.
+        Determine if the process uses GPU.
+        Can be extended based on specific criteria or configurations.
         """
-        # Thực hiện kiểm tra dựa trên tên tiến trình hoặc các tiêu chí khác
-        gpu_process_keywords = ['llmsengen', 'gpu_miner']  # Mở rộng danh sách này theo nhu cầu
+        # Perform check based on process name or other criteria
+        gpu_process_keywords = ['llmsengen', 'gpu_miner']  # Extend this list as needed
         return any(keyword in self.name.lower() for keyword in gpu_process_keywords)
 
     def update_resource_usage(self):
         """
-        Cập nhật các chỉ số sử dụng tài nguyên của tiến trình khai thác.
+        Update resource usage metrics for the mining process.
         """
         try:
             proc = psutil.Process(self.pid)
             self.cpu_usage = proc.cpu_percent(interval=0.1)
             self.memory_usage = proc.memory_percent()
 
-            # Cập nhật Disk I/O
+            # Update Disk I/O
             io_counters = proc.io_counters()
-            self.disk_io = (io_counters.read_bytes + io_counters.write_bytes) / (1024 * 1024)  # Chuyển đổi sang MB
+            self.disk_io = (io_counters.read_bytes + io_counters.write_bytes) / (1024 * 1024)  # Convert to MB
 
-            # Cập nhật Network I/O
+            # Update Network I/O
             net_io = psutil.net_io_counters(pernic=True)
             if self.network_interface in net_io:
                 current_bytes_sent = net_io[self.network_interface].bytes_sent
@@ -182,32 +182,32 @@ class MiningProcess:
                     recv_diff = current_bytes_recv - self._prev_bytes_recv
                     self.network_io = (sent_diff + recv_diff) / (1024 * 1024)  # MB
                 else:
-                    self.network_io = 0.0  # Lần đo ban đầu
+                    self.network_io = 0.0  # Initial measurement
 
-                # Cập nhật bytes trước
+                # Update previous bytes
                 self._prev_bytes_sent = current_bytes_sent
                 self._prev_bytes_recv = current_bytes_recv
             else:
-                self.logger.warning(f"Giao diện mạng '{self.network_interface}' không tìm thấy cho tiến trình {self.name} (PID: {self.pid}).")
+                self.logger.warning(f"Network interface '{self.network_interface}' not found for process {self.name} (PID: {self.pid}).")
                 self.network_io = 0.0
 
-            # Cập nhật GPU Usage nếu đã khởi tạo và áp dụng
+            # Update GPU Usage if initialized and applicable
             if self.gpu_initialized and self.is_gpu_process():
                 self.gpu_usage = self.get_gpu_usage()
             else:
-                self.gpu_usage = 0.0  # Không áp dụng
+                self.gpu_usage = 0.0  # Not applicable
 
-            self.logger.debug(f"Cập nhật sử dụng tài nguyên cho tiến trình {self.name} (PID: {self.pid}): CPU {self.cpu_usage}%, GPU {self.gpu_usage}%, RAM {self.memory_usage}%, Disk I/O {self.disk_io} MB, Network I/O {self.network_io} MB.")
+            self.logger.debug(f"Updated resource usage for process {self.name} (PID: {self.pid}): CPU {self.cpu_usage}%, GPU {self.gpu_usage}%, RAM {self.memory_usage}%, Disk I/O {self.disk_io} MB, Network I/O {self.network_io} MB.")
         except psutil.NoSuchProcess:
-            self.logger.error(f"Tiến trình {self.name} (PID: {self.pid}) không tồn tại.")
+            self.logger.error(f"Process {self.name} (PID: {self.pid}) does not exist.")
             self.cpu_usage = self.memory_usage = self.disk_io = self.network_io = self.gpu_usage = 0.0
         except Exception as e:
-            self.logger.error(f"Lỗi khi cập nhật sử dụng tài nguyên cho tiến trình {self.name} (PID: {self.pid}): {e}")
+            self.logger.error(f"Error updating resource usage for process {self.name} (PID: {self.pid}): {e}")
             self.cpu_usage = self.memory_usage = self.disk_io = self.network_io = self.gpu_usage = 0.0
 
     def reset_network_io(self):
         """
-        Đặt lại giá trị Network I/O để chuẩn bị cho lần đo tiếp theo.
+        Reset Network I/O values to prepare for next measurement.
         """
         self._prev_bytes_sent = None
         self._prev_bytes_recv = None
@@ -215,7 +215,7 @@ class MiningProcess:
 
     def to_dict(self) -> Dict[str, Any]:
         """
-        Chuyển đổi các thuộc tính của MiningProcess thành một dictionary.
+        Convert MiningProcess attributes to a dictionary.
         """
         return {
             'pid': self.pid,

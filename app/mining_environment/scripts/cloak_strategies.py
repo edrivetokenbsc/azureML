@@ -46,7 +46,7 @@ class CpuCloakStrategy(CloakStrategy):
 
             adjustments = {
                 'cpu_freq': self.freq_adjustment,
-                # Có thể thêm điều chỉnh số luồng CPU nếu cần
+                # Can add CPU thread adjustments if needed
             }
             self.logger.info(
                 f"Prepared CPU throttling adjustments: frequency={self.freq_adjustment}MHz "
@@ -276,7 +276,7 @@ class CacheCloakStrategy(CloakStrategy):
             raise
 
 class CloakStrategyFactory:
-    """Factory để tạo các instance của các chiến lược cloaking."""
+    """Factory for creating instances of cloaking strategies."""
 
     _strategies: Dict[str, Type[CloakStrategy]] = {
         'cpu': CpuCloakStrategy,
@@ -284,7 +284,7 @@ class CloakStrategyFactory:
         'network': NetworkCloakStrategy,
         'disk_io': DiskIoCloakStrategy,
         'cache': CacheCloakStrategy
-        # Thêm các chiến lược khác ở đây nếu cần
+        # Add other strategies here if needed
     }
 
     @staticmethod
@@ -295,5 +295,5 @@ class CloakStrategyFactory:
                 return strategy_class(config, logger, gpu_initialized)
             return strategy_class(config, logger)
         else:
-            logger.warning(f"Không tìm thấy chiến lược cloaking: {strategy_name}")
+            logger.warning(f"Cloaking strategy not found: {strategy_name}")
             return None
